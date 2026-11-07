@@ -1,0 +1,17 @@
+name: rdy
+version: 0.1.0
+description: "Plan with rdy from Hermes: read, write and propose; only a person approves."
+author: rdy
+license: MIT
+manifest_version: 2
+api_version: 1
+requires_hermes: ">=0.22.2"
+provides_tools: []
+provides_hooks:
+  - pre_tool_call
+config_schema:
+  rdy_path:
+    type: str
+    default: rdy
+    label: rdy program
+    description: "The rdy program to check and guard. Set it when rdy is not on PATH."
