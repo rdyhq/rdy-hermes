@@ -102,6 +102,9 @@ The README, both SKILL.md files and the output of `hermes rdy doctor` and
   `--args` takes the rest of the line, so `--env` comes before `--args`; and
   `${workspaceFolder}` must be in single quotes, or the shell empties it before Hermes
   sees it.
+- `rdy mcp --project <folder>` exits when the folder is not an rdy project, so
+  `hermes mcp add` must run inside an rdy project. If its check fails, Hermes saves
+  the entry with `enabled: false`; doctor reports it.
 - An MCP entry's env reaches only the MCP server. The agent's terminal gets RDY_ACTOR
   only through the profile's `.env` plus `terminal.env_passthrough`.
 - Catalog rule 11: a plugin never reads `.env` files. Doctor checks RDY_ACTOR in the

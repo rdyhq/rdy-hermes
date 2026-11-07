@@ -111,7 +111,8 @@ def doctor_lines(facts: dict) -> tuple:
         row(False, "rdy MCP server entry", setup_fix)
     elif entry.get("enabled") is False:
         row(False, "rdy MCP server entry is turned off (enabled: false)",
-            "Turn it on in config.yaml, or add it again with the line hermes rdy setup prints.")
+            "Hermes turns it off when its first check fails. Run the hermes rdy setup "
+            "line again inside an rdy project.")
     else:
         row(True, "rdy MCP server entry")
 
@@ -248,12 +249,14 @@ def setup_lines(program: str, profile: Optional[str], home: Optional[Path]) -> t
         "rdy for Hermes: setup",
         "This writes nothing. Do these three steps yourself, then check with hermes rdy doctor.",
         "",
-        "1. Add rdy's MCP server. Run this line exactly as it is:",
+        "1. Add rdy's MCP server. In a folder that is already an rdy project",
+        "   (no project yet? run rdy init there first), run this line exactly as it is:",
         "",
         f"   {hermes} mcp add rdy --command {command} --env RDY_ACTOR=agent:hermes "
         f"--args mcp --project '{WORKSPACE}'",
         "",
-        "   It starts rdy once to list its tools and may offer a tool picker. Keep every tool.",
+        "   Hermes starts rdy once to check the line, and rdy needs a project for that.",
+        "   It may offer a tool picker. Keep every tool.",
         "",
         f"2. Add this line to this profile's .env file{env_file}:",
         "",

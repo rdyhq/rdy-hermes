@@ -52,16 +52,18 @@ plugin adds no tools of its own.
 
 Run `hermes rdy setup`. It prints three things to add. Add them yourself:
 
-1. **The rdy MCP server.** Run this line exactly as printed:
+1. **The rdy MCP server.** In a folder that is already an rdy project (no
+   project yet? run `rdy init` there first), run this line exactly as printed:
 
    ```
    hermes mcp add rdy --command rdy --env RDY_ACTOR=agent:hermes --args mcp --project '${workspaceFolder}'
    ```
 
+   Hermes starts rdy once to check the line, and rdy needs a project for that.
+   If the check fails, Hermes saves the server turned off, and doctor tells you.
    Keep the single quotes: without them the shell empties `${workspaceFolder}`
    before Hermes sees it. `--env` must come before `--args`, because `--args`
-   takes the rest of the line. Hermes starts rdy once to list its tools and may
-   offer a tool picker. Keep every tool.
+   takes the rest of the line. Hermes may offer a tool picker. Keep every tool.
 
 2. **One line in your profile's `.env`:**
 
@@ -154,8 +156,10 @@ cannot approve from the chat. Approve in a terminal.
 
 - The guard reads the text of commands and code the agent runs. It cannot follow
   a command the agent encodes on purpose, or writes to a file and then runs with
-  `bash <file>`. rdy still refuses a bare approve there; a relay there is not
-  stopped. Your own typed approve is the real stop: read what you approve.
+  `bash <file>`. The same holds for a script that a no-agent cron job runs, and
+  for keys typed into a desktop terminal through computer use. rdy still refuses
+  a bare approve there; a relay there is not stopped. Your own typed approve is
+  the real stop: read what you approve.
 - The guard never reads file writes, so writing a plan or a README that mentions
   these commands is fine.
 - It blocks a few harmless commands that only mention a relay flag, such as
