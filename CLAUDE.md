@@ -56,8 +56,10 @@ Files: `plugin.yaml`, `__init__.py` (register), `guard.py`, `cli.py`,
 - Exactly these pass: `--help` or `-h` on any verb, `rdy dispute list`, `rdy tags`,
   `rdy publication check`, `rdy auth state`, `rdy auth installs` and `rdy key show`.
   `rdy auth token`, `sign-in`, `sign-out` and the `rdy_auth` tool are always blocked.
-- In tool calls that run something, only `RDY_ACTOR=agent:hermes` passes. Any other
-  value, and clearing it, is blocked. An emptied environment (`env -i` and the like)
+- In tool calls that run something, every mention of RDY_ACTOR is blocked except
+  the exact assignment `RDY_ACTOR=agent:hermes` and plain reads (`$RDY_ACTOR`,
+  `${RDY_ACTOR:-x}`, `printenv RDY_ACTOR`, echo without a redirect or pipe,
+  `os.environ.get`, `os.getenv`). This is an allowlist on purpose. An emptied environment (`env -i` and the like)
   is blocked when the same text holds an rdy token.
 - The guard never returns approve or modify, and never waits for a person. If it
   fails, Hermes blocks the call (fail closed).

@@ -89,6 +89,19 @@ BLOCK_COMMANDS = [
     ('$env:RDY_ACTOR = "human:x"', ACTOR),
     ("Remove-Item Env:RDY_ACTOR", ACTOR),
     ("declare -x RDY_ACTOR=human:x", ACTOR),
+    ("local RDY_ACTOR=human:x", ACTOR),
+    # forms that drop or replace RDY_ACTOR without a plain assignment
+    ("export -n RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    ("export -n RDY_ACTOR=agent:hermes", ACTOR),
+    ("declare +x RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    ("typeset +x RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    ("unset -v RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    ("x=rdy; env --uns RDY_ACTOR $x approve P-x@1", ACTOR),
+    ("printf -v RDY_ACTOR human:x; export RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    ("read RDY_ACTOR <<< human:x; export RDY_ACTOR; x=rdy; $x approve P-x@1", ACTOR),
+    (": ${RDY_ACTOR:=human:x}; x=rdy; $x approve P-x@1", ACTOR),
+    ("echo RDY_ACTOR=agent:hermes >> .env", ACTOR),
+    ("echo RDY_ACTOR=human:x | tee -a .env", ACTOR),
     # an emptied or replaced environment next to an rdy token
     ("x=rdy; env -i PATH=$PATH $x approve P-x@1", EMPTY),
     ("x=rdy; env --ignore-environment PATH=$PATH $x approve P-x@1", EMPTY),
@@ -97,6 +110,13 @@ BLOCK_COMMANDS = [
     ("env -i PATH=$PATH rdy status", EMPTY),
     ("x=rdy; sudo $x approve P-x@1", EMPTY),
     ("x=rdy; ssh localhost $x approve P-x@1", EMPTY),
+    ("x=rdy; exec -c $x approve P-x@1", EMPTY),
+    ("x=rdy; env --ignore PATH=$PATH $x approve P-x@1", EMPTY),
+    ("x=rdy; env --ign PATH=$PATH $x approve P-x@1", EMPTY),
+    ("x=rdy; setpriv --reset-env $x approve P-x@1", EMPTY),
+    # stated false blocks, named in the README
+    ("grep -rn rdy_land docs/", PERSON),
+    ("env -i PATH=$PATH make sign", EMPTY),
     ("env -i PATH=$PATH ./build.sh --key v2", EMPTY),  # stated false block: "key" is an rdy verb
 ]
 
@@ -121,11 +141,19 @@ PASS_COMMANDS = [
     "RDY_ACTOR=agent:hermes rdy status",
     'RDY_ACTOR="agent:hermes" rdy status',
     "export RDY_ACTOR=agent:hermes",
-    "echo RDY_ACTOR=agent:hermes >> .env",
+    "env RDY_ACTOR=agent:hermes rdy status",
+    "FOO=1 RDY_ACTOR=agent:hermes rdy status",
     "echo $RDY_ACTOR",
+    'echo "actor is ${RDY_ACTOR:-unset}"',
+    "echo RDY_ACTOR should be agent:hermes",
     "printenv RDY_ACTOR",
     "env -i PATH=$PATH ls",
     "ssh -i ~/.ssh/id_garden host ls",
+    # sudo and ssh pass unless the rdy program comes with a person verb or a P-ref
+    "ssh host 'cd rdy-hermes-plugin && git pull'",
+    "cd rdy-garden && ssh build-host make",
+    "sudo apt-get install -y rdy-tools",
+    "sudo install -m755 rdy /usr/local/bin/rdy",
     "ls",
     "echo rdy is ready to land",
     "cd rdy-garden && ls",
@@ -188,6 +216,22 @@ BLOCK_CODE = [
     ('subprocess.run([x, "approve", "P-x@1"], env={"PATH": p})', EMPTY),
     ('os.environ.clear()\nsubprocess.run([x, "approve", "P-x@1"])', EMPTY),
     ('subprocess.run(["rdy", "status"], env={"PATH": p})', EMPTY),
+    # positional environments
+    ('os.execve(x, [x, "approve", "P-x@1"], {"PATH": p})', EMPTY),
+    ('os.execvpe(x, [x, "approve", "P-x@1"], {"PATH": p})', EMPTY),
+    ('os.posix_spawn(x, [x, "approve", "P-x@1"], {"PATH": p})', EMPTY),
+    ('os.posix_spawnp(x, [x, "approve", "P-x@1"], {"PATH": p})', EMPTY),
+    ('os.spawnve(os.P_WAIT, x, [x, "approve", "P-x@1"], {"PATH": p})', EMPTY),
+    ('os.execle(x, x, "approve", "P-x@1", {"PATH": p})', EMPTY),
+    # dunder forms
+    ('os.environ.__setitem__("RDY_ACTOR", "human:x")', ACTOR),
+    ('os.environ.__delitem__("RDY_ACTOR")', ACTOR),
+    # writes of the right value are blocked too (allowlist; harmless false blocks)
+    ('os.environ["RDY_ACTOR"] = "agent:hermes"', ACTOR),
+    ('subprocess.run(["rdy", "status"], env={**os.environ, "RDY_ACTOR": "agent:hermes"})', ACTOR),
+    # stated false blocks, named in the README
+    ('subprocess.run(["npm", "publish"], env={"CI": "1"})', EMPTY),
+    ('print("run rdy approve P-x@1 yourself")', PERSON),
 ]
 
 PASS_CODE = [
@@ -198,8 +242,9 @@ PASS_CODE = [
     'subprocess.run(["rdy", "status"], env=dict(os.environ))',
     'subprocess.run(["rdy", "status"], env=os.environ.copy())',
     'subprocess.run(["rdy", "status"], env=None)',
-    'os.environ["RDY_ACTOR"] = "agent:hermes"',
-    'subprocess.run(["rdy", "status"], env={**os.environ, "RDY_ACTOR": "agent:hermes"})',
+    'os.execve("/usr/local/bin/rdy", ["rdy", "status"], os.environ)',
+    'os.execve(path, args, dict(os.environ, FOO="1"))',
+    'print(os.environ.get("RDY_ACTOR", "unset"))',
     'subprocess.run(["rdy", "approve", "--help"])',
     'print("plan the garden beds")',
 ]

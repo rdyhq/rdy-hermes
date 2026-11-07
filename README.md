@@ -4,8 +4,7 @@ Plan with rdy from Hermes. The agent reads, writes and
 proposes. Only you approve.
 
 rdy keeps what a team intends and decided, and gives it to people as a docs site
-and to agents as briefings and rules. This plugin connects a Hermes agent to rdy,
-teaches it the rdy loop, and stops it from ever approving or landing on its own.
+and to agents as briefings and rules. This plugin connects a Hermes agent to rdy, teaches it the rdy loop, and blocks the agent's own approvals, so the approve command stays with you.
 
 ## What you get
 
@@ -60,7 +59,7 @@ Run `hermes rdy setup`. It prints three things to add. Add them yourself:
    ```
 
    Hermes starts rdy once to check the line, and rdy needs a project for that.
-   If the check fails, Hermes saves the server turned off, and doctor tells you.
+   If that check fails, Hermes may still save the entry, but turned off. Doctor tells you; run the line again inside an rdy project.
    Keep the single quotes: without them the shell empties `${workspaceFolder}`
    before Hermes sees it. `--env` must come before `--args`, because `--args`
    takes the rest of the line. Hermes may offer a tool picker. Keep every tool.
@@ -133,8 +132,9 @@ Only a person approves, lands or tags in rdy. Three stops make that hold:
    `rdy_key_revoke`, whatever you named the MCP server.
 2. **The guard reads commands and code the agent runs** (the terminal, code
    execution, process tools). There it blocks rdy commands for those acts, the
-   relay flags `--relayed-by` and `--evidence`, any `RDY_ACTOR` other than
-   `agent:hermes`, and an emptied environment (`env -i` and the like) next to an
+   relay flags `--relayed-by` and `--evidence`, every mention of `RDY_ACTOR`
+   except the exact `RDY_ACTOR=agent:hermes` and plain reads (such as
+   `$RDY_ACTOR`), and an emptied environment (`env -i` and the like) next to an
    rdy command.
 3. **rdy itself** refuses a bare approve, land, tag or answer from an agent,
    because the agent carries `RDY_ACTOR=agent:hermes`.
@@ -152,6 +152,10 @@ These pass: `--help` on any command, `rdy dispute list`, `rdy tags`,
 If you use Hermes only through a chat app (Discord, Telegram and the like), you
 cannot approve from the chat. Approve in a terminal.
 
+Type the approve command in your own terminal, not as a `!` command inside Hermes: Hermes's shell carries the agent's name.
+
+The guard and RDY_ACTOR hold for any terminal backend; rdy itself must be installed where the terminal runs.
+
 ## Honest limits
 
 - The guard reads the text of commands and code the agent runs. It cannot follow
@@ -162,8 +166,15 @@ cannot approve from the chat. Approve in a terminal.
   the real stop: read what you approve.
 - The guard never reads file writes, so writing a plan or a README that mentions
   these commands is fine.
-- It blocks a few harmless commands that only mention a relay flag, such as
-  `grep -- --evidence`, and an `env -i` command that mentions a word like `key`.
+- The shell has more ways to drop an environment than any list (`at`,
+  `crontab`, `docker run`, `chroot`, `unshare` and others). The guard names the
+  common ones; rdy's own actor stop is the one that matters.
+- It blocks some harmless commands: a command or code run that mentions an rdy
+  verb (approve, tag, sign, publish, key and the others) next to an env dict or
+  `env -i`, a person-only tool name such as rdy_land, or an rdy approve command
+  even inside a string. It also blocks any shell command that mentions a relay
+  flag, such as `grep -- --evidence`, and any change to RDY_ACTOR, even to
+  `agent:hermes` from code.
 - The agent's terminal can rewrite the profile's `.env` or `config.yaml`. That
   change takes effect in the next session. `rdy:loop` runs `hermes rdy doctor`
   at the start of every session and stops when an RDY_ACTOR line is missing.
@@ -183,7 +194,7 @@ cannot approve from the chat. Approve in a terminal.
 ## Settings
 
 One setting, `rdy_path` (default `rdy`): the rdy program to check and guard.
-Set it in the Desktop's plugin settings, or in `config.yaml`:
+Set it in the Hermes desktop app's plugin settings, or in `config.yaml`:
 
 ```yaml
 plugins:

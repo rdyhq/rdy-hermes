@@ -19,7 +19,8 @@ In that text it blocks:
     dispute, resolve, auth, or key bind, retire or revoke;
   - the relay flags --relayed-by and --evidence, and the names of the rdy MCP
     tools above (a relay sent to rdy's server by hand);
-  - RDY_ACTOR set to anything but agent:hermes, or cleared;
+  - any mention of RDY_ACTOR except the exact assignment RDY_ACTOR=agent:hermes
+    and plain reads (an allowlist: the shell has too many ways to change it);
   - an emptied environment (env -i and the like) next to an rdy token, because
     rdy acts as the person when RDY_ACTOR is missing.
 
@@ -302,18 +303,45 @@ def _subcommand(rest: list) -> Optional[str]:
     return None
 
 
-# RDY_ACTOR: only the exact value agent:hermes may be set.
+
+# RDY_ACTOR: an allowlist. In running text every mention of RDY_ACTOR is
+# blocked, except the exact assignment RDY_ACTOR=agent:hermes and plain reads.
+# The shell has many ways to change or drop a variable (unset -v, export -n,
+# declare +x, read, printf -v, env --uns...), so naming the safe forms is
+# safer than listing the unsafe ones.
 _ACTOR = re.compile(r"RDY_ACTOR", re.I)
-_ACTOR_CLEAR_BEFORE = re.compile(
-    r"(?:\bunset(?:env)?\b|\s-u\s*|--unset=?|\.pop\b|\bdel\b[^\n;]*|\bdelenv\b"
-    r"|\bremove-item\b[^\n;]*|\bremove\b|\bdiscard\b)\W*$",
-    re.I,
-)
-_ACTOR_CALL_BEFORE = re.compile(
-    r"(?:\bputenv|\bsetenv|\bsetdefault|\bsetenvironmentvariable)\W*$", re.I
-)
-_ACTOR_SET_AFTER = re.compile(r"\s*[\])]*\s*(\+?=|:)(?![=:])\s*([^\s,;&|)\]}]*)")
-_ACTOR_ARG_AFTER = re.compile(r"\s*[\])]*\s*,\s*([^\s,;&|)\]}]*)")
+_ACTOR_EXACT_AFTER = re.compile(r"=agent:hermes(?=[\s;&|),]|$)")
+_ACTOR_PARAM_READ_AFTER = re.compile(r"(?:\}|:?[-+])")
+_ACTOR_PY_READ_BEFORE = re.compile(r"(?:os\.environ\.get|os\.getenv|\.get)\s*\(\s*$", re.I)
+_ASSIGNMENT_TOKEN = re.compile(r"^[A-Za-z_]\w*=\S*$")
+_ACTOR_PREFIX_WORDS = frozenset({"export", "env", "--env"})
+
+
+def _actor_mention_allowed(text: str, start: int, end: int) -> bool:
+    before = text[max(0, start - 80):start]
+    after = text[end:end + 40]
+    # $RDY_ACTOR and ${RDY_ACTOR}, ${RDY_ACTOR:-x}, ${RDY_ACTOR+x} (not := or =).
+    if before.endswith("${"):
+        return bool(_ACTOR_PARAM_READ_AFTER.match(after)) and not after.startswith(":=")
+    if before.endswith("$"):
+        return True
+    if _ACTOR_PY_READ_BEFORE.search(before):
+        return True
+    seg_start = max(text.rfind(c, 0, start) for c in "\n;&|(`") + 1
+    prefix_words = text[seg_start:start].split()
+    line_end = text.find("\n", end)
+    line = text[seg_start:line_end if line_end != -1 else len(text)]
+    if prefix_words == ["printenv"]:
+        return True
+    # echo that only prints: no redirect and no pipe into another program.
+    if prefix_words and prefix_words[0].lower() == "echo" and ">" not in line and "|" not in line:
+        return True
+    if not _ACTOR_EXACT_AFTER.match(after):
+        return False
+    if not prefix_words:
+        return True
+    last = prefix_words[-1]
+    return last.lower() in _ACTOR_PREFIX_WORDS or bool(_ASSIGNMENT_TOKEN.match(last))
 
 
 def _actor_changed(text: str) -> bool:
@@ -323,31 +351,27 @@ def _actor_changed(text: str) -> bool:
             continue
         if end < len(text) and (text[end].isalnum() or text[end] == "_"):
             continue
-        line_start = text.rfind("\n", 0, start) + 1
-        before = text[max(line_start, start - 60):start]
-        after = text[end:end + 120]
-        if _ACTOR_CLEAR_BEFORE.search(before):
-            return True
-        if _ACTOR_CALL_BEFORE.search(before):
-            arg = _ACTOR_ARG_AFTER.match(after)
-            if arg is None or arg.group(1) != AGENT_ACTOR:
-                return True
-            continue
-        setting = _ACTOR_SET_AFTER.match(after)
-        if setting is None:
-            continue
-        if setting.group(1) == "+=" or setting.group(2) != AGENT_ACTOR:
+        if not _actor_mention_allowed(text, start, end):
             return True
     return False
 
 
 # An emptied or replaced environment, next to an rdy token.
 _EMPTY_ENV = re.compile(
-    r"(?:^|[^\w-])env\s+(?:-[a-z0-9]*i[a-z0-9]*|--ignore-environment|-)(?=\s|$)"
-    r"|environ\s*\.\s*clear\s*\(",
+    r"(?:^|[^\w-])env\s+(?:-[a-z0-9]*i[a-z0-9]*|--ign(?!ore-s)[a-z-]*|-)(?=\s|$)"
+    r"|environ\s*\.\s*clear\s*\("
+    r"|\bexec\s+(?:-[a-z]+\s+)*-[a-z]*c[a-z]*(?=\s|$)"
+    r"|\bsetpriv\b[^\n;]*--reset-env",
     re.I | re.M,
 )
 _ENV_ARG = re.compile(r"(?<![\w.-])env\s*(?:=(?!=)|:)[ \t]*", re.I)
+# Python calls that take the environment as a positional argument: name -> index
+# (-1 means the last argument).
+_ENV_POSITIONAL = {
+    "execve": 2, "execvpe": 2, "spawnve": 3, "spawnvpe": 3, "posix_spawn": 2,
+    "posix_spawnp": 2, "execle": -1, "execlpe": -1, "spawnle": -1, "spawnlpe": -1,
+}
+_ENV_CALL = re.compile(r"\b(" + "|".join(_ENV_POSITIONAL) + r")\s*\(")
 _FRESH_SESSION = re.compile(
     r"(?:^|[\s;&|(`])(?:sudo|su|doas|runuser|ssh|systemd-run)(?=\s|$)", re.I | re.M
 )
@@ -358,23 +382,55 @@ _VERB_WORD = re.compile(
 )
 
 
+def _call_arguments(text: str, open_paren: int) -> list:
+    """Top-level arguments of a call, from the index just after its "("."""
+    args, depth, current = [], 0, []
+    for ch in text[open_paren:open_paren + 2000]:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            if depth == 0:
+                args.append("".join(current))
+                return args
+            depth -= 1
+        elif ch == "," and depth == 0:
+            args.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    args.append("".join(current))
+    return args
+
+
+def _carries_environ(expression: str) -> bool:
+    expression = expression.strip()
+    return (not expression or expression.startswith("None")
+            or "environ" in expression or "process.env" in expression)
+
+
 def _environment_emptied(text: str) -> bool:
-    strong = bool(_RDY_WORD.search(text) or _PROPOSAL_REF.search(text)) or (
+    program = bool(_RDY_WORD.search(text)) or (
         _extra_program is not None
         and re.search(r"(?<![\w.-])" + re.escape(_extra_program) + r"(?![\w])", text, re.I)
         is not None
     )
+    strong = program or bool(_PROPOSAL_REF.search(text))
     any_token = strong or bool(_VERB_WORD.search(text))
     if not any_token:
         return False
     if _EMPTY_ENV.search(text):
         return True
     for match in _ENV_ARG.finditer(text):
-        expression = text[match.end():match.end() + 300].split("\n", 1)[0].strip()
-        if not expression or expression.startswith("None"):
-            continue
-        if "environ" in expression or "process.env" in expression:
-            continue
-        return True
-    # A new login or another user's session starts without RDY_ACTOR.
-    return strong and bool(_FRESH_SESSION.search(text))
+        expression = text[match.end():match.end() + 300].split("\n", 1)[0]
+        if not _carries_environ(expression):
+            return True
+    for match in _ENV_CALL.finditer(text):
+        args = _call_arguments(text, match.end())
+        index = _ENV_POSITIONAL[match.group(1)]
+        if index == -1 or len(args) > index:
+            if not _carries_environ(args[index]):
+                return True
+    # A new login or another user's session starts without RDY_ACTOR: only
+    # when the rdy program comes with a person verb or a proposal ref.
+    act = bool(_PROPOSAL_REF.search(text) or _VERB_WORD.search(text))
+    return program and act and bool(_FRESH_SESSION.search(text))

@@ -43,6 +43,8 @@ rdy commands you run in the terminal would count as the person's own.
 6. Tell the person the proposal id and version, what changed in one or two lines,
    and the exact command to type in their own terminal, outside this chat:
    `rdy approve P-<id>@<n>`
+   Give it in your chat reply. Never pass it through `echo`, `print` or any
+   other tool call; the guard blocks those.
 
 ## Only the person approves
 
